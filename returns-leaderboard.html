@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Returns Leaderboard</title>
+<style>
+  :root {
+    --page-bg: #f3f4f6;
+    --card-bg: #ffffff;
+    --ink: #1d1f24;
+    --muted: #8a8f98;
+    --hairline: #e6e7ea;
+    --grid: #eceef1;
+    --zero: #c7cbd1;
+
+    /* Asset-class colors, matched to the source legend */
+    --equities: #4f93e0;
+    --fixedIncome: #8bc34a;
+    --commodities: #e0ad4a;
+    --fx: #9aa0a6;
+    --realEstate: #16356b;
+    --crypto: #e5403a;
+
+    --font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--page-bg);
+    font-family: var(--font);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    padding: 28px 16px;
+  }
+
+  .card {
+    max-width: 560px;
+    margin: 0 auto;
+    background: var(--card-bg);
+    border: 1px solid var(--hairline);
+    border-radius: 12px;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.04), 0 8px 24px rgba(16, 24, 40, 0.05);
+    padding: 18px 18px 14px;
+    position: relative;
+  }
+
+  header.head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  .title {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    line-height: 1.2;
+  }
+  .title .usd {
+    font-weight: 400;
+    color: var(--muted);
+    font-size: 13px;
+    margin-left: 4px;
+  }
+  .range {
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .controls label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--muted);
+    display: block;
+    margin-bottom: 3px;
+  }
+  select {
+    font-family: var(--font);
+    font-size: 12.5px;
+    color: var(--ink);
+    background: #fff;
+    border: 1px solid var(--hairline);
+    border-radius: 7px;
+    padding: 5px 8px;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' fill='none' stroke='%238a8f98' stroke-width='1.4' stroke-linecap='round'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+    padding-right: 24px;
+  }
+  select:focus { outline: 2px solid #cfe0f6; outline-offset: 1px; }
+
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin: 4px 0 8px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--hairline);
+  }
+  .legend .item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    color: #3a3d44;
+  }
+  .legend .swatch {
+    width: 11px; height: 11px; border-radius: 2px; flex: 0 0 auto;
+  }
+
+  .chartwrap { position: relative; min-height: 160px; }
+  svg { display: block; width: 100%; height: auto; }
+
+  .row-g { cursor: default; }
+  .row-g .bar { transition: opacity .2s ease; }
+  .row-g:hover .bar { opacity: .82; }
+
+  .vlabel { font-size: 10.5px; font-weight: 600; fill: #33363d; }
+  .name { font-size: 11px; fill: #232529; }
+  .axislabel { font-size: 10px; fill: var(--muted); }
+  .groupbox { fill: none; stroke: #edeef0; stroke-width: 1; }
+
+  /* staggered intro */
+  .row-g { opacity: 0; transform: translateY(3px); }
+  .row-g.in { opacity: 1; transform: translateY(0); transition: opacity .35s ease, transform .35s ease; }
+
+  .tooltip {
+    position: absolute;
+    pointer-events: none;
+    background: #1d1f24;
+    color: #fff;
+    font-size: 11px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    white-space: nowrap;
+    opacity: 0;
+    transform: translate(-50%, -120%);
+    transition: opacity .12s ease;
+    z-index: 5;
+  }
+  .tooltip b { font-weight: 700; }
+
+  .empty {
+    padding: 40px 12px;
+    text-align: center;
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .loading {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    background: rgba(255, 255, 255, 0.66);
+    color: var(--muted);
+    font-size: 12.5px;
+    border-radius: 8px;
+    z-index: 6;
+  }
+  .loading.on { display: flex; }
+  .spinner {
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    border: 2px solid var(--hairline);
+    border-top-color: var(--equities);
+    animation: spin .7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  footer.foot {
+    margin-top: 8px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    font-size: 10.5px;
+    color: var(--muted);
+  }
+  footer.foot .src { font-style: normal; }
+
+  @media (max-width: 460px) {
+    .controls { width: 100%; }
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <header class="head">
+      <div>
+        <div class="title">Returns Leaderboard <span class="usd">(in USD)</span></div>
+        <div class="range" id="rangeLabel"></div>
+      </div>
+      <div class="controls">
+        <div>
+          <label for="monthSel">Month</label>
+          <select id="monthSel"></select>
+        </div>
+        <div>
+          <label for="yearSel">Year</label>
+          <select id="yearSel"></select>
+        </div>
+      </div>
+    </header>
+
+    <div class="legend" id="legend"></div>
+
+    <div class="chartwrap">
+      <div id="chart"></div>
+      <div class="tooltip" id="tooltip"></div>
+      <div class="loading" id="loading"><span class="spinner"></span><span id="loadingText">Loading...</span></div>
+    </div>
+
+    <footer class="foot">
+      <span>Total returns, sorted high to low.</span>
+      <span class="src" id="source">Source: Yahoo Finance</span>
+    </footer>
+  </div>
+
+<script>
+/* =========================================================================
+   DATA
+   -------------------------------------------------------------------------
+   Each key is "YYYY-MM". To add a month, copy a block and edit it.
+   `cls` must be one of: equities | fixedIncome | commodities | fx | realEstate | crypto
+   `value` is the percent return for the period (use a number, e.g. 5.3 or -1.7).
+   Rows do not need to be pre-sorted; the chart sorts them high to low.
+
+   Template:
+     "2026-06": {
+       rangeLabel: "30-May-26 to 30-Jun-26",   // optional; shown as the subtitle
+       rows: [
+         { name: "EM Equities", value: 0.0, cls: "equities" },
+         ...
+       ]
+     },
+
+   The values below for 2026-05 are read directly from the uploaded chart.
+   ========================================================================= */
+const DATA = {
+  "2026-05": {
+    rangeLabel: "30-Apr-26 to 29-May-26",
+    rows: [
+      { name: "EM Equities",        value:  9.7,  cls: "equities" },
+      { name: "NASDAQ",             value:  8.4,  cls: "equities" },
+      { name: "Magnificent 7",      value:  6.7,  cls: "equities" },
+      { name: "US Equities",        value:  5.3,  cls: "equities" },
+      { name: "Global Equities",    value:  5.2,  cls: "equities" },
+      { name: "Industrial Metals",  value:  5.1,  cls: "commodities" },
+      { name: "Japan Equities",     value:  5.0,  cls: "equities" },
+      { name: "US Small Cap",       value:  4.4,  cls: "equities" },
+      { name: "Euro Area Equities", value:  3.9,  cls: "equities" },
+      { name: "Germany Equities",   value:  3.2,  cls: "equities" },
+      { name: "Silver",             value:  2.8,  cls: "commodities" },
+      { name: "Dollar Index",       value:  0.9,  cls: "fx" },
+      { name: "US IG Corporate",    value:  0.8,  cls: "fixedIncome" },
+      { name: "US High Yield",      value:  0.5,  cls: "fixedIncome" },
+      { name: "US Treasury Bills",  value:  0.3,  cls: "fixedIncome" },
+      { name: "US TIPS",            value:  0.2,  cls: "fixedIncome" },
+      { name: "US Treasuries",      value:  0.1,  cls: "fixedIncome" },
+      { name: "US REITs",           value: -0.2,  cls: "realEstate" },
+      { name: "UK Equities",        value: -0.3,  cls: "equities" },
+      { name: "EUR",                value: -0.6,  cls: "fx" },
+      { name: "GBP",                value: -1.1,  cls: "fx" },
+      { name: "Gold",               value: -1.2,  cls: "commodities" },
+      { name: "CAD",                value: -1.5,  cls: "fx" },
+      { name: "JPY",                value: -1.7,  cls: "fx" },
+      { name: "China Equities",     value: -3.0,  cls: "equities" },
+      { name: "Bitcoin",            value: -3.1,  cls: "crypto" },
+      { name: "Commodities",        value: -3.6,  cls: "commodities" },
+      { name: "Ethereum",           value: -10.8, cls: "crypto" },
+      { name: "WTI Crude",          value: -11.6, cls: "commodities" }
+    ]
+  }
+};
+
+/* The chart now fetches each month from the Flask backend (/api/returns).
+   The sample above is only a fallback for when this file is opened directly,
+   with no server running. */
+const FALLBACK = Object.values(DATA)[0] || null;
+
+let current = null;        // the {rangeLabel, rows} currently displayed
+let reqToken = 0;          // guards against out-of-order fetch responses
+const START_YEAR = 2016;   // earliest selectable year in the dropdown
+
+/* ---- class metadata ---- */
+const CLASSES = [
+  { key: "equities",     label: "Equities" },
+  { key: "fixedIncome",  label: "Fixed Income" },
+  { key: "commodities",  label: "Commodities" },
+  { key: "fx",           label: "FX" },
+  { key: "realEstate",   label: "Real Estate" },
+  { key: "crypto",       label: "Crypto" }
+];
+const COLOR = {};
+CLASSES.forEach(c => { COLOR[c.key] = getComputedStyle(document.documentElement).getPropertyValue("--" + c.key).trim(); });
+
+const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+
+/* ---- chart geometry ---- */
+const W = 500;
+const plotLeft = 42, plotRight = 350, nameRight = 496;
+const topPad = 8, rowH = 18, barH = 11, bottomAxis = 26;
+
+/* ---- DOM ---- */
+const monthSel = document.getElementById("monthSel");
+const yearSel  = document.getElementById("yearSel");
+const chartEl  = document.getElementById("chart");
+const rangeEl  = document.getElementById("rangeLabel");
+const tip      = document.getElementById("tooltip");
+const chartWrap = document.querySelector(".chartwrap");
+
+/* ---- build legend ---- */
+(function buildLegend(){
+  const el = document.getElementById("legend");
+  el.innerHTML = CLASSES.map(c =>
+    `<span class="item"><span class="swatch" style="background:${COLOR[c.key]}"></span>${c.label}</span>`
+  ).join("");
+})();
+
+/* ---- loading overlay refs ---- */
+const loadingEl   = document.getElementById("loading");
+const loadingText = document.getElementById("loadingText");
+const sourceEl    = document.getElementById("source");
+function showLoading(label){ loadingText.textContent = "Loading " + label + "..."; loadingEl.classList.add("on"); }
+function hideLoading(){ loadingEl.classList.remove("on"); }
+
+/* ---- selectors (fixed range; the backend fetches whatever you pick) ---- */
+function lastCompletedPeriod(){
+  const d = new Date();
+  d.setDate(1);
+  d.setMonth(d.getMonth() - 1);   // previous month
+  return { year: d.getFullYear(), month: d.getMonth() + 1 };
+}
+function populateYears(){
+  const now = new Date().getFullYear();
+  let html = "";
+  for (let y = now; y >= START_YEAR; y--) html += `<option value="${y}">${y}</option>`;
+  yearSel.innerHTML = html;
+}
+function maxSelectableMonth(year){
+  // Past years: all 12 months. Current year: only months that have started (through
+  // the current month) -- later months have no returns yet, so they are disabled.
+  const now = new Date();
+  if (Number(year) < now.getFullYear()) return 12;
+  if (Number(year) > now.getFullYear()) return 0;
+  return now.getMonth() + 1;
+}
+function populateMonths(year){
+  const maxM = maxSelectableMonth(year);
+  monthSel.innerHTML = MONTH_NAMES.map((nm, i) => {
+    const m = i + 1;
+    return `<option value="${m}"${m > maxM ? " disabled" : ""}>${nm}</option>`;
+  }).join("");
+}
+function setSelectors(year, month){ yearSel.value = String(year); monthSel.value = String(month); }
+function currentPeriod(){
+  return `${yearSel.value}-${String(Number(monthSel.value)).padStart(2, "0")}`;
+}
+function monthYearLabel(){ return `${MONTH_NAMES[Number(monthSel.value)-1]} ${yearSel.value}`; }
+
+/* ---- fetch the chosen month from the backend, then render ---- */
+async function loadAndRender(){
+  const period = currentPeriod();
+  const label = monthYearLabel();
+  const token = ++reqToken;
+  showLoading(label);
+  try {
+    const res = await fetch("/api/returns?period=" + period);
+    if (!res.ok) throw new Error("server " + res.status);
+    const json = await res.json();
+    if (token !== reqToken) return;          // superseded by a newer selection
+    current = json.data;                      // {rangeLabel, rows} or null
+    if (sourceEl) sourceEl.textContent = "Source: Yahoo Finance";
+    render(label);
+  } catch (err) {
+    if (token !== reqToken) return;
+    current = FALLBACK;                        // opened as a file with no server
+    if (sourceEl) sourceEl.textContent = FALLBACK ? "Built-in sample (server not reachable)" : "No server connected";
+    render(label);
+  } finally {
+    if (token === reqToken) hideLoading();
+  }
+}
+
+/* ---- scale ---- */
+function makeScale(rows){
+  const vals = rows.map(r => r.value);
+  const dataMin = Math.min(...vals, 0);
+  const dataMax = Math.max(...vals, 0);
+  const range = (dataMax - dataMin) || 1;
+  const pad = Math.max(1, range * 0.05);
+  const dMin = dataMin - pad;
+  const dMax = dataMax + pad;
+  const span = dMax - dMin;
+  const x = v => plotLeft + ((v - dMin) / span) * (plotRight - plotLeft);
+  return { x, dMin, dMax };
+}
+function gridTicks(dMin, dMax){
+  const ticks = [];
+  const start = Math.ceil(dMin / 5) * 5;
+  for (let t = start; t <= dMax; t += 5) ticks.push(t);
+  if (!ticks.includes(0) && dMin < 0 && dMax > 0) ticks.push(0);
+  return ticks.sort((a,b) => a - b);
+}
+
+/* Visual banding: chunk rows into groups of 4; the final group absorbs any remainder. */
+function groupRanges(n){
+  const ranges = [];
+  const groups = Math.max(1, Math.floor(n / 4));
+  let start = 0;
+  for (let i = 0; i < groups; i++){
+    const count = (i === groups - 1) ? (n - start) : 4;
+    ranges.push([start, count]);
+    start += count;
+  }
+  return ranges;
+}
+
+/* ---- render ---- */
+function render(myLabel){
+  rangeEl.textContent = (current && current.rangeLabel) ? current.rangeLabel : myLabel;
+
+  if (!current || !current.rows || !current.rows.length){
+    chartEl.innerHTML = `<div class="empty">No data for ${myLabel} yet.</div>`;
+    return;
+  }
+
+  const rows = [...current.rows].sort((a,b) => b.value - a.value);
+  const n = rows.length;
+  const rowsBottom = topPad + n * rowH;
+  const svgH = rowsBottom + bottomAxis;
+  const { x, dMin, dMax } = makeScale(rows);
+  const x0 = x(0);
+
+  let svg = `<svg viewBox="0 0 ${W} ${svgH}" role="img" aria-label="Returns leaderboard">`;
+
+  // group boxes (visual banding)
+  groupRanges(n).forEach(([first, count]) => {
+    const top = topPad + first * rowH + 1;
+    const h = count * rowH - 2;
+    svg += `<rect class="groupbox" x="4" y="${top.toFixed(1)}" width="${(nameRight - 4).toFixed(1)}" height="${h.toFixed(1)}" rx="5"/>`;
+  });
+
+  // gridlines
+  const ticks = gridTicks(dMin, dMax);
+  ticks.forEach(t => {
+    const gx = x(t);
+    const isZero = t === 0;
+    svg += `<line x1="${gx.toFixed(1)}" y1="${topPad - 2}" x2="${gx.toFixed(1)}" y2="${rowsBottom}" stroke="${isZero ? 'var(--zero)' : 'var(--grid)'}" stroke-width="1"/>`;
+    svg += `<text class="axislabel" x="${gx.toFixed(1)}" y="${rowsBottom + 14}" text-anchor="middle">${t}%</text>`;
+  });
+
+  // rows
+  rows.forEach((r, i) => {
+    const yc = topPad + i * rowH + rowH / 2;
+    const by = yc - barH / 2;
+    const bx = x(r.value);
+    const pos = r.value >= 0;
+    const bw = Math.max(0.5, Math.abs(bx - x0));
+    const rectX = pos ? x0 : bx;
+    const color = COLOR[r.cls] || "#999";
+
+    const valTxt = r.value.toFixed(1) + "%";
+    const labelX = pos ? bx + 4 : bx - 4;
+    const anchor = pos ? "start" : "end";
+
+    svg += `<g class="row-g" data-name="${r.name}" data-val="${valTxt}" style="transition-delay:${i * 14}ms">`;
+    svg += `<rect class="bar" x="${rectX.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${barH}" rx="1.5" fill="${color}"/>`;
+    svg += `<text class="vlabel" x="${labelX.toFixed(1)}" y="${yc.toFixed(1)}" text-anchor="${anchor}" dominant-baseline="central">${valTxt}</text>`;
+    svg += `<text class="name" x="${nameRight}" y="${yc.toFixed(1)}" text-anchor="end" dominant-baseline="central">${r.name}</text>`;
+    svg += `</g>`;
+  });
+
+  svg += `</svg>`;
+  chartEl.innerHTML = svg;
+
+  // staggered intro + tooltips
+  const groups = chartEl.querySelectorAll(".row-g");
+  requestAnimationFrame(() => groups.forEach(g => g.classList.add("in")));
+  groups.forEach(g => {
+    g.addEventListener("mousemove", (e) => {
+      const rect = chartWrap.getBoundingClientRect();
+      tip.style.left = (e.clientX - rect.left) + "px";
+      tip.style.top  = (e.clientY - rect.top) + "px";
+      tip.innerHTML = `${g.dataset.name} &nbsp; <b>${g.dataset.val}</b>`;
+      tip.style.opacity = "1";
+    });
+    g.addEventListener("mouseleave", () => { tip.style.opacity = "0"; });
+  });
+}
+
+/* ---- wire up ---- */
+yearSel.addEventListener("change", () => {
+  // Rebuild the month list for the selected year, then clamp the chosen month if it
+  // is now a disabled (future) month, so the selection always points at real data.
+  const prevMonth = Number(monthSel.value);
+  populateMonths(yearSel.value);
+  const maxM = maxSelectableMonth(yearSel.value);
+  monthSel.value = String(prevMonth > maxM ? maxM : prevMonth);
+  loadAndRender();
+});
+monthSel.addEventListener("change", loadAndRender);
+
+populateYears();
+const _def = lastCompletedPeriod();
+populateMonths(_def.year);
+setSelectors(_def.year, _def.month);
+loadAndRender();
+</script>
+</body>
+</html>

@@ -1,0 +1,38 @@
+name: update-returns
+
+# Refresh returns_data.json with newly completed months, then commit + push (which
+# triggers a Render redeploy). Runs monthly; can also be run by hand.
+on:
+  schedule:
+    - cron: "0 6 3 * *"   # 06:00 UTC on the 3rd: prior month is complete and settled
+  workflow_dispatch: {}    # manual run (e.g. to re-try after a Yahoo outage)
+
+permissions:
+  contents: write          # needed to push the data commit
+
+concurrency:
+  group: update-returns
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+      - run: pip install -r requirements.txt
+      - run: python fetch_returns.py --selftest    # fail fast if the logic regressed
+      - run: python fetch_returns.py --update        # merge the last 3 completed months
+      - name: Commit returns_data.json if it changed
+        run: |
+          if [[ -n "$(git status --porcelain returns_data.json)" ]]; then
+            git config user.name  "returns-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add returns_data.json
+            git commit -m "data: refresh monthly returns ($(date -u +%Y-%m))"
+            git push
+          else
+            echo "no change; nothing to commit"
+          fi

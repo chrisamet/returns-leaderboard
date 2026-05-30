@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.claude/
+.DS_Store
+
+# internal working notes (kept local, not published)
+tasks/
+returns-leaderboard-handoff.md
