@@ -1,0 +1,21 @@
+name: keep-alive
+
+# Pings the Render app on a schedule so the free-tier instance does not spin down
+# after ~15 min idle. Best-effort: GitHub cron can run several minutes late, so this
+# keeps the service "mostly warm" rather than guaranteeing zero cold starts.
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # roughly every 10 minutes
+  workflow_dispatch: {}        # allow a manual ping
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping the app to keep it awake
+        run: |
+          URL="https://returns-leaderboard.onrender.com/"
+          code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 90 "$URL" || echo 000)
+          echo "ping $URL -> HTTP $code"
+          # Deliberately never fail the job on a transient non-200, so the schedule
+          # stays green and does not spam failure notifications.
