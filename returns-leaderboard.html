@@ -8,6 +8,8 @@
   :root {
     --page-bg: #f3f4f6;
     --card-bg: #ffffff;
+    --surface-2: #fbfcfd;             /* detail panel + form controls */
+    --overlay-bg: rgba(255, 255, 255, 0.66);
     --ink: #1d1f24;
     --muted: #8a8f98;
     --hairline: #e6e7ea;
@@ -23,6 +25,20 @@
     --crypto: #e5403a;
 
     --font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+
+  [data-theme="dark"] {
+    --page-bg: #0f1115;
+    --card-bg: #181b20;
+    --surface-2: #20242b;
+    --overlay-bg: rgba(15, 17, 21, 0.66);
+    --ink: #e7e9ec;
+    --muted: #8b929c;
+    --hairline: #2a2e36;
+    --grid: #262a31;
+    --zero: #3b414b;
+    /* the deep-navy real-estate color is invisible on a dark card -- brighten it */
+    --realEstate: #5d7cc4;
   }
 
   * { box-sizing: border-box; }
@@ -92,7 +108,7 @@
     font-family: var(--font);
     font-size: 12.5px;
     color: var(--ink);
-    background: #fff;
+    background: var(--surface-2);
     border: 1px solid var(--hairline);
     border-radius: 7px;
     padding: 5px 8px;
@@ -118,7 +134,7 @@
     align-items: center;
     gap: 6px;
     font-size: 11.5px;
-    color: #3a3d44;
+    color: var(--ink);
   }
   .legend .swatch {
     width: 11px; height: 11px; border-radius: 2px; flex: 0 0 auto;
@@ -131,10 +147,10 @@
   .row-g .bar { transition: opacity .2s ease; }
   .row-g:hover .bar { opacity: .82; }
 
-  .vlabel { font-size: 10.5px; font-weight: 600; fill: #33363d; }
-  .name { font-size: 11px; fill: #232529; }
+  .vlabel { font-size: 10.5px; font-weight: 600; fill: var(--ink); }
+  .name { font-size: 11px; fill: var(--ink); }
   .axislabel { font-size: 10px; fill: var(--muted); }
-  .groupbox { fill: none; stroke: #edeef0; stroke-width: 1; }
+  .groupbox { fill: none; stroke: var(--grid); stroke-width: 1; }
 
   /* staggered intro */
   .row-g { opacity: 0; transform: translateY(3px); }
@@ -143,8 +159,8 @@
   .tooltip {
     position: absolute;
     pointer-events: none;
-    background: #1d1f24;
-    color: #fff;
+    background: var(--ink);
+    color: var(--card-bg);
     font-size: 11px;
     padding: 5px 8px;
     border-radius: 6px;
@@ -170,7 +186,7 @@
     align-items: center;
     justify-content: center;
     gap: 9px;
-    background: rgba(255, 255, 255, 0.66);
+    background: var(--overlay-bg);
     color: var(--muted);
     font-size: 12.5px;
     border-radius: 8px;
@@ -204,7 +220,7 @@
     border: 1px solid var(--hairline);
     border-radius: 10px;
     padding: 11px 14px 12px;
-    background: #fbfcfd;
+    background: var(--surface-2);
   }
   .detail[hidden] { display: none; }
   .detail-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
@@ -221,14 +237,30 @@
   .detail-spark svg { display: block; width: 100%; height: auto; }
   .spark-tip {
     position: absolute; top: -2px; transform: translate(-50%, -100%);
-    pointer-events: none; background: #1d1f24; color: #fff; font-size: 10.5px;
+    pointer-events: none; background: var(--ink); color: var(--card-bg); font-size: 10.5px;
     padding: 3px 6px; border-radius: 5px; white-space: nowrap;
     opacity: 0; transition: opacity .1s ease; z-index: 7;
   }
   .detail-sparkcap { font-size: 10.5px; color: var(--muted); margin: 0 0 9px; }
-  .detail-stats { display: flex; flex-wrap: wrap; gap: 5px 14px; font-size: 11.5px; color: #3a3d44; }
+  .detail-stats { display: flex; flex-wrap: wrap; gap: 5px 14px; font-size: 11.5px; color: var(--ink); }
   .detail-stats .pos { color: #2e9e5b; }
   .detail-stats .neg { color: var(--crypto); }
+
+  .theme-btn {
+    font-family: var(--font);
+    color: var(--ink);
+    background: var(--surface-2);
+    border: 1px solid var(--hairline);
+    border-radius: 7px;
+    height: 29px;
+    width: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .theme-btn:hover { border-color: var(--muted); }
+  .theme-btn svg { display: block; }
 
   @media (max-width: 460px) {
     .controls { width: 100%; }
@@ -260,6 +292,10 @@
             <option value="ytd">YTD</option>
             <option value="12">1Y</option>
           </select>
+        </div>
+        <div>
+          <label for="themeToggle">Theme</label>
+          <button id="themeToggle" class="theme-btn" type="button" aria-label="Toggle dark mode"></button>
         </div>
       </div>
     </header>
@@ -353,6 +389,13 @@ const DATA = {
    with no server running. */
 const FALLBACK = Object.values(DATA)[0] || null;
 
+/* ---- theme (dark by default; remembers your choice) ---- */
+const MOON_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>';
+const SUN_ICON = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"></circle><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"></path></svg>';
+let savedTheme = "dark";
+try { savedTheme = localStorage.getItem("theme") || "dark"; } catch (e) {}
+document.documentElement.setAttribute("data-theme", savedTheme);
+
 let current = null;        // the {rangeLabel, rows} currently displayed
 let reqToken = 0;          // guards against out-of-order fetch responses
 let ALLDATA = {};          // period -> {rangeLabel, rows}: full history + any live current month
@@ -372,7 +415,8 @@ const CLASSES = [
   { key: "crypto",       label: "Crypto" }
 ];
 const COLOR = {};
-CLASSES.forEach(c => { COLOR[c.key] = getComputedStyle(document.documentElement).getPropertyValue("--" + c.key).trim(); });
+function refreshColors(){ CLASSES.forEach(c => { COLOR[c.key] = getComputedStyle(document.documentElement).getPropertyValue("--" + c.key).trim(); }); }
+refreshColors();
 
 const MONTH_NAMES = ["January","February","March","April","May","June","July","August","September","October","November","December"];
 
@@ -397,14 +441,16 @@ const detailSparkCap = document.getElementById("detailSparkCap");
 const sparkTip = document.getElementById("sparkTip");
 const detailStats = document.getElementById("detailStats");
 const detailClose = document.getElementById("detailClose");
+const themeToggle = document.getElementById("themeToggle");
 
 /* ---- build legend ---- */
-(function buildLegend(){
+function buildLegend(){
   const el = document.getElementById("legend");
   el.innerHTML = CLASSES.map(c =>
     `<span class="item"><span class="swatch" style="background:${COLOR[c.key]}"></span>${c.label}</span>`
   ).join("");
-})();
+}
+buildLegend();
 
 /* ---- loading overlay refs ---- */
 const loadingEl   = document.getElementById("loading");
@@ -765,6 +811,23 @@ yearSel.addEventListener("change", () => {
 monthSel.addEventListener("change", loadAndRender);
 periodSel.addEventListener("change", loadAndRender);
 detailClose.addEventListener("click", () => { closeDetail(); updateUrl(); });
+
+/* ---- light / dark theme ---- */
+function setTheme(theme){
+  document.documentElement.setAttribute("data-theme", theme);
+  try { localStorage.setItem("theme", theme); } catch (e) {}
+  const dark = theme === "dark";
+  themeToggle.innerHTML = dark ? SUN_ICON : MOON_ICON;
+  themeToggle.setAttribute("aria-label", dark ? "Switch to light mode" : "Switch to dark mode");
+  refreshColors();   // re-read class colors for the new palette
+  buildLegend();     // legend swatches use the resolved colors
+  loadAndRender();   // re-render the chart bars with the new palette
+}
+themeToggle.innerHTML = savedTheme === "dark" ? SUN_ICON : MOON_ICON;
+themeToggle.setAttribute("aria-label", savedTheme === "dark" ? "Switch to light mode" : "Switch to dark mode");
+themeToggle.addEventListener("click", () => {
+  setTheme(document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark");
+});
 
 // Apply year/month/period/asset (from the URL or defaults) onto the selectors.
 function applyState(st){
