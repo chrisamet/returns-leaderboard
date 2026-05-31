@@ -217,8 +217,15 @@
     font-size: 20px; line-height: 1; color: var(--muted); padding: 0 2px;
   }
   .detail-close:hover { color: var(--ink); }
-  .detail-spark { margin: 9px 0 7px; }
+  .detail-spark { position: relative; margin: 9px 0 3px; }
   .detail-spark svg { display: block; width: 100%; height: auto; }
+  .spark-tip {
+    position: absolute; top: -2px; transform: translate(-50%, -100%);
+    pointer-events: none; background: #1d1f24; color: #fff; font-size: 10.5px;
+    padding: 3px 6px; border-radius: 5px; white-space: nowrap;
+    opacity: 0; transition: opacity .1s ease; z-index: 7;
+  }
+  .detail-sparkcap { font-size: 10.5px; color: var(--muted); margin: 0 0 9px; }
   .detail-stats { display: flex; flex-wrap: wrap; gap: 5px 14px; font-size: 11.5px; color: #3a3d44; }
   .detail-stats .pos { color: #2e9e5b; }
   .detail-stats .neg { color: var(--crypto); }
@@ -270,7 +277,11 @@
         <div class="detail-title"><span class="detail-name" id="detailName"></span><span class="detail-rank" id="detailRank"></span></div>
         <button class="detail-close" id="detailClose" type="button" aria-label="Close">&times;</button>
       </div>
-      <div class="detail-spark" id="detailSpark"></div>
+      <div class="detail-spark">
+        <div id="detailSpark"></div>
+        <div class="spark-tip" id="sparkTip"></div>
+      </div>
+      <div class="detail-sparkcap" id="detailSparkCap"></div>
       <div class="detail-stats" id="detailStats"></div>
     </div>
 
@@ -382,6 +393,8 @@ const detailEl    = document.getElementById("detail");
 const detailName  = document.getElementById("detailName");
 const detailRank  = document.getElementById("detailRank");
 const detailSpark = document.getElementById("detailSpark");
+const detailSparkCap = document.getElementById("detailSparkCap");
+const sparkTip = document.getElementById("sparkTip");
 const detailStats = document.getElementById("detailStats");
 const detailClose = document.getElementById("detailClose");
 
@@ -522,6 +535,7 @@ function assetSeries(name){
     return r ? { period: p, value: r.value } : null;
   }).filter(Boolean);
 }
+function fmtMonth(p){ const [y, m] = p.split("-").map(Number); return `${MONTH_NAMES[m - 1].slice(0, 3)} ${y}`; }
 function rankInfo(name, end){
   const rows = [...ALLDATA[end].rows].sort((a, b) => b.value - a.value);
   const rank = rows.findIndex(r => r.name === name) + 1;
@@ -564,7 +578,25 @@ function openDetail(name){
   else                     chg = `&mdash;`;
   detailName.innerHTML = `<span class="swatch" style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${COLOR[cls] || "#999"};margin-right:6px;"></span>${name}`;
   detailRank.innerHTML = `#${ri.rank} of ${ri.total} this month &middot; ${chg} vs last month`;
-  detailSpark.innerHTML = sparklineSVG(assetSeries(name));
+  const series = assetSeries(name);
+  detailSpark.innerHTML = sparklineSVG(series);
+  detailSparkCap.textContent = series.length
+    ? `Monthly returns · ${fmtMonth(series[0].period)} – ${fmtMonth(series[series.length - 1].period)}`
+    : "";
+  const svgEl = detailSpark.querySelector("svg");
+  if (svgEl){
+    svgEl.addEventListener("mousemove", (e) => {
+      const rect = svgEl.getBoundingClientRect();
+      if (!rect.width) return;
+      const f = (e.clientX - rect.left) / rect.width;
+      const idx = Math.max(0, Math.min(series.length - 1, Math.round(f * (series.length - 1))));
+      const d = series[idx];
+      sparkTip.textContent = `${fmtMonth(d.period)}: ${d.value >= 0 ? "+" : ""}${d.value.toFixed(1)}%`;
+      sparkTip.style.left = (e.clientX - rect.left) + "px";
+      sparkTip.style.opacity = "1";
+    });
+    svgEl.addEventListener("mouseleave", () => { sparkTip.style.opacity = "0"; });
+  }
   detailStats.innerHTML = assetStats(name, end).map(s => {
     const txt = s.v == null ? "&mdash;" : (s.v >= 0 ? "+" : "") + s.v.toFixed(1) + "%";
     const klass = s.v == null ? "" : (s.v >= 0 ? "pos" : "neg");
