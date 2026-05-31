@@ -124,6 +124,14 @@ def api_returns():
     return jsonify({"period": period, "data": data})
 
 
+@app.route("/api/history")
+def api_history():
+    # The full set of completed months, straight from the validated in-memory dict.
+    # Instant and network-free; the in-progress month is intentionally absent (the
+    # client fetches it on demand via /api/returns).
+    return jsonify({"data": HISTORY})
+
+
 def _open_browser():
     webbrowser.open("http://127.0.0.1:5000")
 

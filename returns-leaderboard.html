@@ -78,6 +78,7 @@
     display: flex;
     gap: 8px;
     align-items: center;
+    flex-wrap: wrap;
   }
   .controls label {
     font-size: 10px;
@@ -126,7 +127,7 @@
   .chartwrap { position: relative; min-height: 160px; }
   svg { display: block; width: 100%; height: auto; }
 
-  .row-g { cursor: default; }
+  .row-g { cursor: pointer; }
   .row-g .bar { transition: opacity .2s ease; }
   .row-g:hover .bar { opacity: .82; }
 
@@ -198,6 +199,30 @@
   }
   footer.foot .src { font-style: normal; }
 
+  .detail {
+    margin-top: 12px;
+    border: 1px solid var(--hairline);
+    border-radius: 10px;
+    padding: 11px 14px 12px;
+    background: #fbfcfd;
+  }
+  .detail[hidden] { display: none; }
+  .detail-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .detail-name { font-size: 13.5px; font-weight: 700; }
+  .detail-rank { font-size: 11.5px; color: var(--muted); margin-left: 8px; }
+  .detail-rank .up { color: #2e9e5b; font-weight: 700; }
+  .detail-rank .down { color: var(--crypto); font-weight: 700; }
+  .detail-close {
+    border: 0; background: none; cursor: pointer;
+    font-size: 20px; line-height: 1; color: var(--muted); padding: 0 2px;
+  }
+  .detail-close:hover { color: var(--ink); }
+  .detail-spark { margin: 9px 0 7px; }
+  .detail-spark svg { display: block; width: 100%; height: auto; }
+  .detail-stats { display: flex; flex-wrap: wrap; gap: 5px 14px; font-size: 11.5px; color: #3a3d44; }
+  .detail-stats .pos { color: #2e9e5b; }
+  .detail-stats .neg { color: var(--crypto); }
+
   @media (max-width: 460px) {
     .controls { width: 100%; }
   }
@@ -219,6 +244,16 @@
           <label for="yearSel">Year</label>
           <select id="yearSel"></select>
         </div>
+        <div>
+          <label for="periodSel">Window</label>
+          <select id="periodSel">
+            <option value="1">1M</option>
+            <option value="3">3M</option>
+            <option value="6">6M</option>
+            <option value="ytd">YTD</option>
+            <option value="12">1Y</option>
+          </select>
+        </div>
       </div>
     </header>
 
@@ -228,6 +263,15 @@
       <div id="chart"></div>
       <div class="tooltip" id="tooltip"></div>
       <div class="loading" id="loading"><span class="spinner"></span><span id="loadingText">Loading...</span></div>
+    </div>
+
+    <div class="detail" id="detail" hidden>
+      <div class="detail-head">
+        <div class="detail-title"><span class="detail-name" id="detailName"></span><span class="detail-rank" id="detailRank"></span></div>
+        <button class="detail-close" id="detailClose" type="button" aria-label="Close">&times;</button>
+      </div>
+      <div class="detail-spark" id="detailSpark"></div>
+      <div class="detail-stats" id="detailStats"></div>
     </div>
 
     <footer class="foot">
@@ -300,6 +344,11 @@ const FALLBACK = Object.values(DATA)[0] || null;
 
 let current = null;        // the {rangeLabel, rows} currently displayed
 let reqToken = 0;          // guards against out-of-order fetch responses
+let ALLDATA = {};          // period -> {rangeLabel, rows}: full history + any live current month
+let openAsset = null;      // asset whose detail panel is open, or null
+let isApplyingUrl = false; // guards URL writes while applying back/forward
+let serverOk = false;      // did /api/history load (vs offline file:// fallback)?
+const FALLBACK_PERIOD = Object.keys(DATA)[0] || null;   // offline-only seed key ("2026-05")
 const START_YEAR = 2016;   // earliest selectable year in the dropdown
 
 /* ---- class metadata ---- */
@@ -328,6 +377,13 @@ const chartEl  = document.getElementById("chart");
 const rangeEl  = document.getElementById("rangeLabel");
 const tip      = document.getElementById("tooltip");
 const chartWrap = document.querySelector(".chartwrap");
+const periodSel   = document.getElementById("periodSel");
+const detailEl    = document.getElementById("detail");
+const detailName  = document.getElementById("detailName");
+const detailRank  = document.getElementById("detailRank");
+const detailSpark = document.getElementById("detailSpark");
+const detailStats = document.getElementById("detailStats");
+const detailClose = document.getElementById("detailClose");
 
 /* ---- build legend ---- */
 (function buildLegend(){
@@ -378,28 +434,178 @@ function currentPeriod(){
 }
 function monthYearLabel(){ return `${MONTH_NAMES[Number(monthSel.value)-1]} ${yearSel.value}`; }
 
-/* ---- fetch the chosen month from the backend, then render ---- */
-async function loadAndRender(){
-  const period = currentPeriod();
-  const label = monthYearLabel();
-  const token = ++reqToken;
-  showLoading(label);
+/* ---- full history + client-side period math ---- */
+function periodIndex(p){ const [y, m] = p.split("-").map(Number); return y * 12 + (m - 1); }
+function periodFromIndex(i){ const y = Math.floor(i / 12), m = i % 12 + 1; return `${y}-${String(m).padStart(2, "0")}`; }
+
+// Available months ending at `end` for a kind ("1","3","6","12","ytd"), oldest -> newest.
+function windowMonths(end, kind){
+  if (!ALLDATA[end]) return [];
+  if (kind === "1") return [end];
+  const endIdx = periodIndex(end);
+  const startIdx = (kind === "ytd")
+    ? Number(end.split("-")[0]) * 12              // January of the end year
+    : endIdx - (Number(kind) - 1);                 // trailing N months
+  const out = [];
+  for (let i = Math.max(startIdx, 0); i <= endIdx; i++){
+    const p = periodFromIndex(i);
+    if (ALLDATA[p]) out.push(p);                    // only months we actually have
+  }
+  return out;
+}
+
+// Compounded total return for one asset over the window; null if absent in any month.
+function trailingValue(name, win){
+  if (!win.length) return null;
+  let prod = 1;
+  for (const p of win){
+    const row = ALLDATA[p].rows.find(r => r.name === name);
+    if (!row || typeof row.value !== "number") return null;
+    prod *= 1 + row.value / 100;
+  }
+  return (prod - 1) * 100;
+}
+
+// Splice the window's date label from the first/last months' labels (tolerant of nulls).
+function windowLabel(win){
+  const first = ALLDATA[win[0]] && ALLDATA[win[0]].rangeLabel;
+  const last  = ALLDATA[win[win.length - 1]] && ALLDATA[win[win.length - 1]].rangeLabel;
+  const from = (first && first.includes(" to ")) ? first.split(" to ")[0] : null;
+  const to   = (last  && last.includes(" to "))  ? last.split(" to ")[1]  : null;
+  return (from && to) ? `${from} to ${to}` : null;
+}
+
+// {rangeLabel, rows} for the chosen end + period kind. 1M is the month verbatim.
+function computePeriodData(end, kind){
+  const win = windowMonths(end, kind);
+  if (!win.length) return null;
+  if (kind === "1") return ALLDATA[end];
+  const rows = [];
+  for (const meta of ALLDATA[end].rows){
+    const v = trailingValue(meta.name, win);
+    if (v !== null) rows.push({ name: meta.name, value: Math.round(v * 10) / 10, cls: meta.cls });
+  }
+  return { rangeLabel: windowLabel(win), rows };
+}
+
+// Ensure a period is loaded; only the in-progress month ever hits the network.
+async function ensureMonth(period){
+  if (ALLDATA[period]) return;
   try {
     const res = await fetch("/api/returns?period=" + period);
-    if (!res.ok) throw new Error("server " + res.status);
+    if (!res.ok) return;
     const json = await res.json();
-    if (token !== reqToken) return;          // superseded by a newer selection
-    current = json.data;                      // {rangeLabel, rows} or null
+    if (json && json.data) ALLDATA[period] = json.data;
+  } catch (e) { /* leave absent -> empty state */ }
+}
+
+// Load every completed month once. Offline (file://) falls back to the built-in sample.
+async function loadHistory(){
+  try {
+    const res = await fetch("/api/history");
+    if (!res.ok) throw new Error("history " + res.status);
+    const json = await res.json();
+    ALLDATA = json.data || {};
+    serverOk = true;
     if (sourceEl) sourceEl.textContent = "Source: Yahoo Finance";
-    render(label);
-  } catch (err) {
-    if (token !== reqToken) return;
-    current = FALLBACK;                        // opened as a file with no server
+  } catch (e) {
+    ALLDATA = FALLBACK ? { [FALLBACK_PERIOD]: FALLBACK } : {};
+    serverOk = false;
     if (sourceEl) sourceEl.textContent = FALLBACK ? "Built-in sample (server not reachable)" : "No server connected";
-    render(label);
-  } finally {
-    if (token === reqToken) hideLoading();
   }
+}
+
+/* ---- asset detail ---- */
+function assetSeries(name){
+  return Object.keys(ALLDATA).sort().map(p => {
+    const r = ALLDATA[p].rows.find(x => x.name === name);
+    return r ? { period: p, value: r.value } : null;
+  }).filter(Boolean);
+}
+function rankInfo(name, end){
+  const rows = [...ALLDATA[end].rows].sort((a, b) => b.value - a.value);
+  const rank = rows.findIndex(r => r.name === name) + 1;
+  const prev = periodFromIndex(periodIndex(end) - 1);
+  let change = null;                                 // null -> "NEW"
+  if (ALLDATA[prev]){
+    const pr = [...ALLDATA[prev].rows].sort((a, b) => b.value - a.value).findIndex(r => r.name === name) + 1;
+    if (pr > 0) change = pr - rank;                  // +ve = moved up the board
+  }
+  return { rank, total: rows.length, change };
+}
+function assetStats(name, end){
+  return [["1M","1"],["3M","3"],["6M","6"],["YTD","ytd"],["1Y","12"]].map(([lab, kind]) =>
+    ({ lab, v: trailingValue(name, windowMonths(end, kind)) }));
+}
+function sparklineSVG(series){
+  const w = 460, h = 46, pad = 3;
+  if (!series.length) return "";
+  const m = Math.max(1, ...series.map(s => Math.abs(s.value)));
+  const n = series.length, step = (w - 2 * pad) / Math.max(1, n - 1);
+  const y0 = h / 2, y = v => y0 - (v / m) * (h / 2 - pad);
+  let s = `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Monthly returns history">`;
+  s += `<line x1="0" y1="${y0}" x2="${w}" y2="${y0}" stroke="var(--zero)" stroke-width="1"/>`;
+  series.forEach((d, i) => {
+    const x = pad + i * step, c = d.value >= 0 ? "#2e9e5b" : "var(--crypto)";
+    s += `<line x1="${x.toFixed(1)}" y1="${y0}" x2="${x.toFixed(1)}" y2="${y(d.value).toFixed(1)}" stroke="${c}" stroke-width="1.4"/>`;
+  });
+  return s + `</svg>`;
+}
+function openDetail(name){
+  const end = currentPeriod();
+  if (!ALLDATA[end] || !ALLDATA[end].rows.some(r => r.name === name)){ closeDetail(); return; }
+  openAsset = name;
+  const cls = (ALLDATA[end].rows.find(r => r.name === name) || {}).cls;
+  const ri = rankInfo(name, end);
+  let chg;
+  if (ri.change === null) chg = `<span class="up">NEW</span>`;
+  else if (ri.change > 0)  chg = `<span class="up">&#9650; ${ri.change}</span>`;
+  else if (ri.change < 0)  chg = `<span class="down">&#9660; ${Math.abs(ri.change)}</span>`;
+  else                     chg = `&mdash;`;
+  detailName.innerHTML = `<span class="swatch" style="display:inline-block;width:10px;height:10px;border-radius:2px;background:${COLOR[cls] || "#999"};margin-right:6px;"></span>${name}`;
+  detailRank.innerHTML = `#${ri.rank} of ${ri.total} this month &middot; ${chg} vs last month`;
+  detailSpark.innerHTML = sparklineSVG(assetSeries(name));
+  detailStats.innerHTML = assetStats(name, end).map(s => {
+    const txt = s.v == null ? "&mdash;" : (s.v >= 0 ? "+" : "") + s.v.toFixed(1) + "%";
+    const klass = s.v == null ? "" : (s.v >= 0 ? "pos" : "neg");
+    return `<span class="stat">${s.lab} <b class="${klass}">${txt}</b></span>`;
+  }).join("");
+  detailEl.hidden = false;
+}
+function closeDetail(){ openAsset = null; detailEl.hidden = true; }
+
+/* ---- shareable URL state ---- */
+function readUrl(){
+  const q = new URLSearchParams(location.search), out = {};
+  const y = Number(q.get("y")); if (y >= START_YEAR && y <= new Date().getFullYear()) out.year = y;
+  const m = Number(q.get("m")); if (m >= 1 && m <= 12) out.month = m;
+  const p = q.get("p"); if (["1","3","6","12","ytd"].includes(p)) out.kind = p;
+  const a = q.get("a"); if (a) out.asset = a;
+  return out;
+}
+function updateUrl(){
+  if (isApplyingUrl) return;
+  const q = new URLSearchParams({ y: yearSel.value, m: monthSel.value, p: periodSel.value });
+  if (openAsset) q.set("a", openAsset);
+  history.replaceState(null, "", location.pathname + "?" + q.toString());
+}
+
+/* ---- compute the chosen window from ALLDATA, then render ---- */
+async function loadAndRender(){
+  const end = currentPeriod();
+  const kind = periodSel.value;
+  const label = monthYearLabel();
+  if (!ALLDATA[end]){                 // only the in-progress month is missing -> fetch it
+    const token = ++reqToken;
+    showLoading(label);
+    await ensureMonth(end);
+    if (token !== reqToken) return;    // superseded by a newer selection
+  }
+  current = computePeriodData(end, kind);
+  render(label);
+  if (openAsset) openDetail(openAsset); else closeDetail();
+  updateUrl();
+  hideLoading();
 }
 
 /* ---- scale ---- */
@@ -416,9 +622,13 @@ function makeScale(rows){
   return { x, dMin, dMax };
 }
 function gridTicks(dMin, dMax){
+  // Adaptive step so wide trailing windows (1Y can span >100%) don't crowd the axis,
+  // while single months keep the familiar 5% gridlines.
+  const span = dMax - dMin;
+  const step = [5, 10, 20, 25, 50, 100].find(s => span / s <= 9) || 200;
   const ticks = [];
-  const start = Math.ceil(dMin / 5) * 5;
-  for (let t = start; t <= dMax; t += 5) ticks.push(t);
+  const start = Math.ceil(dMin / step) * step;
+  for (let t = start; t <= dMax; t += step) ticks.push(t);
   if (!ticks.includes(0) && dMin < 0 && dMax > 0) ticks.push(0);
   return ticks.sort((a,b) => a - b);
 }
@@ -506,6 +716,7 @@ function render(myLabel){
       tip.style.opacity = "1";
     });
     g.addEventListener("mouseleave", () => { tip.style.opacity = "0"; });
+    g.addEventListener("click", () => { openDetail(g.dataset.name); updateUrl(); });
   });
 }
 
@@ -520,12 +731,41 @@ yearSel.addEventListener("change", () => {
   loadAndRender();
 });
 monthSel.addEventListener("change", loadAndRender);
+periodSel.addEventListener("change", loadAndRender);
+detailClose.addEventListener("click", () => { closeDetail(); updateUrl(); });
 
-populateYears();
-const _def = lastCompletedPeriod();
-populateMonths(_def.year);
-setSelectors(_def.year, _def.month);
-loadAndRender();
+// Apply year/month/period/asset (from the URL or defaults) onto the selectors.
+function applyState(st){
+  const def = lastCompletedPeriod();
+  const year = st.year || def.year;
+  populateMonths(year);
+  let month = st.month || def.month;
+  const maxM = maxSelectableMonth(year);
+  if (month > maxM) month = maxM || 1;
+  setSelectors(year, month);
+  periodSel.value = st.kind || "1";
+  openAsset = st.asset || null;
+}
+
+(async function init(){
+  populateYears();
+  applyState(readUrl());
+  await loadHistory();
+  // Offline (no server): point the selector at the one month we actually have.
+  if (!serverOk && Object.keys(ALLDATA).length && !ALLDATA[currentPeriod()]){
+    const only = Object.keys(ALLDATA).sort().pop();
+    const [oy, om] = only.split("-").map(Number);
+    populateMonths(oy);
+    setSelectors(oy, om);
+  }
+  await loadAndRender();
+  window.addEventListener("popstate", async () => {
+    isApplyingUrl = true;
+    applyState(readUrl());
+    await loadAndRender();
+    isApplyingUrl = false;
+  });
+})();
 </script>
 </body>
 </html>
