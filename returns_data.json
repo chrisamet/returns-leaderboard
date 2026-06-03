@@ -18043,5 +18043,155 @@
         "value": 3.6
       }
     ]
+  },
+  "2026-05": {
+    "rangeLabel": "30-Apr-26 to 29-May-26",
+    "rows": [
+      {
+        "cls": "equities",
+        "name": "EM Equities",
+        "value": 7.2
+      },
+      {
+        "cls": "equities",
+        "name": "NASDAQ",
+        "value": 10.6
+      },
+      {
+        "cls": "equities",
+        "name": "Magnificent 7",
+        "value": 6.7
+      },
+      {
+        "cls": "equities",
+        "name": "US Equities",
+        "value": 5.3
+      },
+      {
+        "cls": "equities",
+        "name": "Global Equities",
+        "value": 4.6
+      },
+      {
+        "cls": "commodities",
+        "name": "Industrial Metals",
+        "value": 4.5
+      },
+      {
+        "cls": "equities",
+        "name": "Japan Equities",
+        "value": 4.3
+      },
+      {
+        "cls": "equities",
+        "name": "US Small Cap",
+        "value": 4.5
+      },
+      {
+        "cls": "equities",
+        "name": "Euro Area Equities",
+        "value": 3.2
+      },
+      {
+        "cls": "equities",
+        "name": "Germany Equities",
+        "value": 2.8
+      },
+      {
+        "cls": "commodities",
+        "name": "Silver",
+        "value": 2.5
+      },
+      {
+        "cls": "fx",
+        "name": "Dollar Index",
+        "value": 0.8
+      },
+      {
+        "cls": "fixedIncome",
+        "name": "US IG Corporate",
+        "value": 0.9
+      },
+      {
+        "cls": "fixedIncome",
+        "name": "US High Yield",
+        "value": 0.4
+      },
+      {
+        "cls": "fixedIncome",
+        "name": "US Treasury Bills",
+        "value": 0.3
+      },
+      {
+        "cls": "fixedIncome",
+        "name": "US TIPS",
+        "value": 0.2
+      },
+      {
+        "cls": "fixedIncome",
+        "name": "US Treasuries",
+        "value": 0.1
+      },
+      {
+        "cls": "realEstate",
+        "name": "US REITs",
+        "value": -0.7
+      },
+      {
+        "cls": "equities",
+        "name": "UK Equities",
+        "value": -0.5
+      },
+      {
+        "cls": "fx",
+        "name": "EUR",
+        "value": -0.3
+      },
+      {
+        "cls": "fx",
+        "name": "GBP",
+        "value": -0.3
+      },
+      {
+        "cls": "commodities",
+        "name": "Gold",
+        "value": -1.5
+      },
+      {
+        "cls": "fx",
+        "name": "CAD",
+        "value": -0.8
+      },
+      {
+        "cls": "fx",
+        "name": "JPY",
+        "value": 0.6
+      },
+      {
+        "cls": "equities",
+        "name": "China Equities",
+        "value": -4.3
+      },
+      {
+        "cls": "crypto",
+        "name": "Bitcoin",
+        "value": -3.6
+      },
+      {
+        "cls": "commodities",
+        "name": "Commodities",
+        "value": -5.2
+      },
+      {
+        "cls": "crypto",
+        "name": "Ethereum",
+        "value": -11.2
+      },
+      {
+        "cls": "commodities",
+        "name": "WTI Crude",
+        "value": -16.9
+      }
+    ]
   }
 }
